@@ -78,33 +78,108 @@ class RFPAnalyzer:
             return ""
 
     def analyze_rfp(self, text: str) -> Dict[str, Any]:
+        """Analyze RFP text and extract structured information"""
+
         analysis_prompt = f"""You are an expert RFP analyst for contractor companies.
 Analyze the provided RFP document and extract comprehensive insights in a structured JSON format.
 Focus on information that helps contractors understand requirements and prepare competitive bids.
 
 Analyze this RFP document and provide detailed insights in the following JSON structure:
-<JSON STRUCTURE OMITTED FOR BREVITY>
+
+{{
+    "project_overview": {{
+        "title": "Project title",
+        "description": "Brief project description",
+        "client_organization": "Client name/organization",
+        "project_type": "Type of project",
+        "industry_sector": "Industry/sector"
+    }},
+    "requirements": {{
+        "functional_requirements": ["List of functional requirements"],
+        "technical_requirements": ["List of technical requirements"],
+        "compliance_requirements": ["Regulatory/compliance needs"],
+        "performance_requirements": ["Performance criteria"]
+    }},
+    "technology_stack": {{
+        "preferred_technologies": ["Preferred tech stack"],
+        "platforms": ["Required platforms"],
+        "databases": ["Database requirements"],
+        "frameworks": ["Framework preferences"],
+        "third_party_integrations": ["Required integrations"]
+    }},
+    "project_details": {{
+        "estimated_budget": "Budget range if mentioned",
+        "timeline": "Project timeline",
+        "start_date": "Expected start date",
+        "key_milestones": ["Important milestones"],
+        "deliverables": ["Expected deliverables"]
+    }},
+    "project_phases": {{
+        "suggested_phases": ["Recommended development phases"],
+        "phase_descriptions": ["Description of each phase"]
+    }},
+    "evaluation_criteria": {{
+        "technical_criteria": ["Technical evaluation factors"],
+        "commercial_criteria": ["Cost evaluation factors"],
+        "experience_criteria": ["Experience requirements"],
+        "weightage": "Scoring weightage if mentioned"
+    }},
+    "submission_requirements": {{
+        "proposal_format": "Required proposal format",
+        "submission_deadline": "Deadline for submission",
+        "required_documents": ["Required documents"],
+        "contact_information": "Contact details"
+    }},
+    "risk_analysis": {{
+        "technical_risks": ["Potential technical challenges"],
+        "project_risks": ["Project delivery risks"],
+        "mitigation_strategies": ["Suggested risk mitigation"]
+    }},
+    "competitive_analysis": {{
+        "likely_competitors": ["Potential competing companies"],
+        "competitive_advantages": ["Areas to highlight"],
+        "differentiators": ["Unique selling points to emphasize"]
+    }},
+    "bid_strategy": {{
+        "key_strengths_to_highlight": ["Strengths to emphasize"],
+        "pricing_strategy": "Recommended pricing approach",
+        "proposal_focus_areas": ["Areas to focus on in proposal"],
+        "win_probability": "Estimated win probability and reasoning"
+    }}
+}}
+
 RFP Document:
 {text}
 
 Provide only the JSON response with detailed analysis. Be thorough and extract as much relevant information as possible.
 """
+
         try:
             response = self.model.generate_content(
                 analysis_prompt,
                 generation_config=self.generation_config
             )
+
+            # Clean and parse JSON response
             content = response.text.strip()
+
+            # Remove markdown code blocks if present
             if content.startswith('```json'):
                 content = content[7:]
             if content.endswith('```'):
                 content = content[:-3]
+
+            # Clean any remaining markdown
             content = content.strip()
+
             analysis = json.loads(content)
             return analysis
+
         except json.JSONDecodeError as e:
             st.error(f"Error parsing AI response: {str(e)}")
+            # Try to extract JSON from the response if it's embedded
             try:
+                # Look for JSON pattern in the response
                 json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
                 if json_match:
                     analysis = json.loads(json_match.group())
@@ -117,7 +192,10 @@ Provide only the JSON response with detailed analysis. Be thorough and extract a
             return {"error": str(e)}
 
     def generate_executive_summary(self, analysis: Dict[str, Any]) -> str:
+        """Generate an executive summary of the RFP analysis"""
+
         summary_prompt = f"""You are an expert business analyst. Create a concise executive summary for contractors.
+
 Based on this RFP analysis, create a brief executive summary (200-300 words) that highlights:
 1. Key project opportunity
 2. Critical requirements
@@ -130,6 +208,7 @@ Analysis data:
 
 Write in a professional, actionable tone for decision-makers.
 """
+
         try:
             response = self.model.generate_content(
                 summary_prompt,
@@ -140,54 +219,77 @@ Write in a professional, actionable tone for decision-makers.
             return f"Error generating summary: {str(e)}"
 
     def generate_docx_report(self, analysis: Dict[str, Any], summary: str) -> BytesIO:
+        """Generate a comprehensive DOCX report"""
         try:
+            # Create a new Document
             doc = Document()
+
+            # Add title
             title = doc.add_heading('RFP Analysis Report', 0)
             title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # Add timestamp
             doc.add_paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             doc.add_paragraph("")
+
+            # Executive Summary
             doc.add_heading('Executive Summary', level=1)
             doc.add_paragraph(summary)
             doc.add_page_break()
+
+            # Project Overview
             if 'project_overview' in analysis:
                 doc.add_heading('Project Overview', level=1)
                 overview = analysis['project_overview']
+
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 hdr_cells = table.rows[0].cells
                 hdr_cells[0].text = 'Attribute'
                 hdr_cells[1].text = 'Details'
+
                 for key, value in overview.items():
                     row_cells = table.add_row().cells
                     row_cells[0].text = key.replace('_', ' ').title()
                     row_cells[1].text = str(value) if value else 'N/A'
+
                 doc.add_paragraph("")
+
+            # Requirements
             if 'requirements' in analysis:
                 doc.add_heading('Requirements', level=1)
                 requirements = analysis['requirements']
+
                 for req_type, req_list in requirements.items():
                     if req_list:
                         doc.add_heading(req_type.replace('_', ' ').title(), level=2)
                         for req in req_list:
                             doc.add_paragraph(f"• {req}")
                         doc.add_paragraph("")
+
+            # Technology Stack
             if 'technology_stack' in analysis:
                 doc.add_heading('Technology Stack', level=1)
                 tech_stack = analysis['technology_stack']
+
                 for tech_type, tech_list in tech_stack.items():
                     if tech_list:
                         doc.add_heading(tech_type.replace('_', ' ').title(), level=2)
                         for tech in tech_list:
                             doc.add_paragraph(f"• {tech}")
                         doc.add_paragraph("")
+
+            # Project Details
             if 'project_details' in analysis:
                 doc.add_heading('Project Details', level=1)
                 details = analysis['project_details']
+
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 hdr_cells = table.rows[0].cells
                 hdr_cells[0].text = 'Attribute'
                 hdr_cells[1].text = 'Details'
+
                 for key, value in details.items():
                     if key == 'key_milestones' or key == 'deliverables':
                         if value:
@@ -198,10 +300,14 @@ Write in a professional, actionable tone for decision-makers.
                         row_cells = table.add_row().cells
                         row_cells[0].text = key.replace('_', ' ').title()
                         row_cells[1].text = str(value) if value else 'N/A'
+
                 doc.add_paragraph("")
+
+            # Bid Strategy
             if 'bid_strategy' in analysis:
                 doc.add_heading('Bid Strategy Recommendations', level=1)
                 strategy = analysis['bid_strategy']
+
                 for key, value in strategy.items():
                     if value:
                         doc.add_heading(key.replace('_', ' ').title(), level=2)
@@ -211,9 +317,12 @@ Write in a professional, actionable tone for decision-makers.
                         else:
                             doc.add_paragraph(str(value))
                         doc.add_paragraph("")
+
+            # Risk Analysis
             if 'risk_analysis' in analysis:
                 doc.add_heading('Risk Analysis', level=1)
                 risks = analysis['risk_analysis']
+
                 for risk_type, risk_list in risks.items():
                     if risk_list:
                         doc.add_heading(risk_type.replace('_', ' ').title(), level=2)
@@ -223,14 +332,18 @@ Write in a professional, actionable tone for decision-makers.
                         else:
                             doc.add_paragraph(str(risk_list))
                         doc.add_paragraph("")
+
+            # Submission Requirements
             if 'submission_requirements' in analysis:
                 doc.add_heading('Submission Requirements', level=1)
                 submission = analysis['submission_requirements']
+
                 table = doc.add_table(rows=1, cols=2)
                 table.style = 'Table Grid'
                 hdr_cells = table.rows[0].cells
                 hdr_cells[0].text = 'Requirement'
                 hdr_cells[1].text = 'Details'
+
                 for key, value in submission.items():
                     if key == 'required_documents' and value:
                         row_cells = table.add_row().cells
@@ -240,10 +353,14 @@ Write in a professional, actionable tone for decision-makers.
                         row_cells = table.add_row().cells
                         row_cells[0].text = key.replace('_', ' ').title()
                         row_cells[1].text = str(value) if value else 'N/A'
+
+            # Save to BytesIO
             docx_buffer = BytesIO()
             doc.save(docx_buffer)
             docx_buffer.seek(0)
+
             return docx_buffer
+
         except Exception as e:
             st.error(f"Error generating DOCX report: {str(e)}")
             return None
